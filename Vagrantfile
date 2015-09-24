@@ -12,6 +12,6 @@ Vagrant.configure(2) do |config|
     pip install tweepy
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/streaming.py
-    nohup python streaming.py | mongoimport --db twitter --collection messages &
+    nohup python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages &
   SHELL
 end
