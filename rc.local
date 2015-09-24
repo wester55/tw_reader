@@ -1,0 +1,6 @@
+#!/bin/sh -e
+
+python /home/vagrant/sleepy.mongoose/httpd.py &
+python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages &
+
+exit 0

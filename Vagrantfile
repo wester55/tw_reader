@@ -14,10 +14,8 @@ Vagrant.configure(2) do |config|
     pip install pymongo==2.7.2
     apt-get -y install git
     git clone https://github.com/mongodb-labs/sleepy.mongoose.git
-    pip install -U mongo
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/streaming.py
-    nohup python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages &
-    nohup python /home/vagrant/sleepy.mongoose/httpd.py &
+
   SHELL
 end
