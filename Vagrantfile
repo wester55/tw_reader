@@ -17,5 +17,10 @@ Vagrant.configure(2) do |config|
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/streaming.py
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/my_script.sh; chmod a+x /home/vagrant/my_script.sh
+    nohup python /home/vagrant/sleepy.mongoose/httpd.py &
+  SHELL
+
+  config.vm.provision "shell", inline: <<-SHELL
+    nohup python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages &
   SHELL
 end
