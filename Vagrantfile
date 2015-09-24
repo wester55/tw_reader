@@ -16,8 +16,8 @@ Vagrant.configure(2) do |config|
     git clone https://github.com/mongodb-labs/sleepy.mongoose.git
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/streaming.py
-    sudo nohup python /home/vagrant/sleepy.mongoose/httpd.py & sleep 1
-    sudo nohup python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages & sleep 1
+    sudo nohup python /home/vagrant/sleepy.mongoose/httpd.py > nohup1.out 2>&1 & sleep 1
+    sudo nohup python /home/vagrant/streaming.py | mongoimport --db twitter --collection messages > nohup2.out 2>&1 & sleep 1
   SHELL
 
 end
