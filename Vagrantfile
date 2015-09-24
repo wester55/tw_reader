@@ -16,6 +16,7 @@ Vagrant.configure(2) do |config|
     git clone https://github.com/mongodb-labs/sleepy.mongoose.git
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
     wget https://raw.githubusercontent.com/wester55/tw_reader/master/streaming.py
-
+    wget https://raw.githubusercontent.com/wester55/tw_reader/master/rc.local && mv -f rc.local /etc/rc.local
+    sh /etc/rc.local
   SHELL
 end
