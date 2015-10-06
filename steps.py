@@ -14,11 +14,14 @@ if len(sys.argv) != 2:
 
 if sys.argv[1] == "setup":
     fldr = os.path.expanduser("~") + "/TrustyBox"
-    vagrant = subprocess.call(["which vagrant"])
+    vagrant = subprocess.Popen(["which", "vagrant"], stdout=subprocess.PIPE).communicate()[0]
     if vagrant == "":
         print "Vagrant not found"
         exit (1)
-    subprocess.call(["mkdir", fldr])
+    try:
+        subprocess.call(["mkdir", fldr])
+    except:
+        pass
     os.chdir(fldr)
     subprocess.call([vagrant, "init"])
     subprocess.call(["/usr/bin/curl", vagrantfile_url + " -o Vagrantfile"])
