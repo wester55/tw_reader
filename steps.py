@@ -19,7 +19,7 @@ vagrant = vagrant.rstrip()
 if vagrant == "":
     print "Vagrant not found"
     exit (1)
-exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
+exist = subprocess.Popen(vagrant + " " + setup_command2, stdout=subprocess.PIPE, shell=True).communicate()[0]
 exist = int(exist)
 if sys.argv[1] == "setup":
     if exist != 0:
