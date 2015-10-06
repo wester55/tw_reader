@@ -18,7 +18,7 @@ if sys.argv[1] == "setup":
     call(["curl", vagrantfile_url + " -o Vagrantfile"])
     call(["Vagrant", "up"])
 elif sys.argv[1] == "run":
-    call(["curl", "--data server=localhost:27017 'http://localhost:27080/_connect'"])
+    call(["curl", "--data", "server=localhost:27017", "'http://localhost:27080/_connect'"])
     call(["curl", filter_command])
 else:
     print "Only one argument allowed, either \"setup\" or \"run\" string must be specified"
