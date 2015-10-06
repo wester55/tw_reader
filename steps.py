@@ -13,8 +13,9 @@ if len(sys.argv) != 2:
     exit(1)
 
 if sys.argv[1] == "setup":
-    subprocess.call(["mkdir", "~/TrustyBox"])
-    os.chdir("~/TrustyBox")
+    fldr = os.expanduser("~") + "/TrustyBox"
+    subprocess.call(["mkdir", fldr])
+    os.chdir(fldr)
     subprocess.call(["Vagrant", "init"])
     subprocess.call(["curl", vagrantfile_url + " -o Vagrantfile"])
     subprocess.call(["Vagrant", "up"])
@@ -24,6 +25,6 @@ elif sys.argv[1] == "run":
     print ""
     p = subprocess.Popen(run_command2, shell=True, stderr=subprocess.PIPE)
     output, err = p.communicate()
- else:
+else:
     print "Only one argument allowed, either \"setup\" or \"run\" string must be specified"
     exit(1)
