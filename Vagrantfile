@@ -8,6 +8,7 @@ Vagrant.configure(2) do |config|
   config.vm.network "forwarded_port", guest: 27080, host: 27080
 
   config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
     apt-get install -y mongodb
     apt-get install -y python-pip
     pip install tweepy
