@@ -14,13 +14,13 @@ if len(sys.argv) != 2:
     print "Only one argument allowed, either \"setup\" or \"run\" string must be specified"
     exit(1)
 
+vagrant = subprocess.Popen(["which", "vagrant"], stdout=subprocess.PIPE).communicate()[0]
+vagrant = vagrant.rstrip()
+if vagrant == "":
+    print "Vagrant not found"
+    exit (1)
 if sys.argv[1] == "setup":
     fldr = os.path.expanduser("~") + "/TrustyBox"
-    vagrant = subprocess.Popen(["which", "vagrant"], stdout=subprocess.PIPE).communicate()[0]
-    vagrant = vagrant.rstrip()
-    if vagrant == "":
-        print "Vagrant not found"
-        exit (1)
     exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
     if exist != 0:
 	    print "Looks like our project already running, may be you want './steps.py run'?"
@@ -35,6 +35,10 @@ if sys.argv[1] == "setup":
     output, err = p.communicate()
     subprocess.call([vagrant, "up"])
 elif sys.argv[1] == "run":
+    exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
+    if exist == 0:
+	    print "Looks like our project not running, you need './steps.py setup' first."
+	    exit (1)
     p = subprocess.Popen(run_command1, shell=True)
     output, err = p.communicate()
     print ""
