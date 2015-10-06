@@ -13,11 +13,11 @@ if len(sys.argv) != 2:
     exit(1)
 
 if sys.argv[1] == "setup":
-    call(["mkdir", "~/TrustyBox"])
+    subprocess.call(["mkdir", "~/TrustyBox"])
     os.chdir("~/TrustyBox")
-    call(["Vagrant", "init"])
-    call(["curl", vagrantfile_url + " -o Vagrantfile"])
-    call(["Vagrant", "up"])
+    subprocess.call(["Vagrant", "init"])
+    subprocess.call(["curl", vagrantfile_url + " -o Vagrantfile"])
+    subprocess.call(["Vagrant", "up"])
 elif sys.argv[1] == "run":
     p = subprocess.Popen(run_command1, shell=True, stderr=subprocess.PIPE)
     output, err = p.communicate()
