@@ -1,4 +1,4 @@
-__author__ = 'Sasha'
+#!/usr/bin/python
 
 import sys
 from subprocess import call
