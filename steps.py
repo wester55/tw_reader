@@ -20,6 +20,7 @@ if vagrant == "":
     print "Vagrant not found"
     exit (1)
 exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
+exist = int(exist)
 if sys.argv[1] == "setup":
     if exist != 0:
 	    print "Looks like our project already running, may be you want './steps.py run'?"
