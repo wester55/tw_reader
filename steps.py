@@ -15,6 +15,7 @@ if len(sys.argv) != 2:
 if sys.argv[1] == "setup":
     fldr = os.path.expanduser("~") + "/TrustyBox"
     vagrant = subprocess.Popen(["which", "vagrant"], stdout=subprocess.PIPE).communicate()[0]
+    vagrant = vagrant.rstrip()
     if vagrant == "":
         print "Vagrant not found"
         exit (1)
