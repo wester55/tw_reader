@@ -32,7 +32,7 @@ if sys.argv[1] == "setup":
     p.communicate()
     subprocess.call([vagrant, "up"])
 elif sys.argv[1] == "run":
-    if exist != 1:
+    if exist == 0:
 	    print "Looks like our project not running, you need './steps.py setup' first."
 	    exit (1)
     p = subprocess.Popen(run_command1, shell=True)
