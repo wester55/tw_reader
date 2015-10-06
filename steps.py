@@ -21,9 +21,9 @@ if sys.argv[1] == "setup":
 elif sys.argv[1] == "run":
     p = subprocess.Popen(run_command1, shell=True, stderr=subprocess.PIPE)
     output, err = p.communicate()
+    print ""
     p = subprocess.Popen(run_command2, shell=True, stderr=subprocess.PIPE)
     output, err = p.communicate()
-    print output
-else:
+ else:
     print "Only one argument allowed, either \"setup\" or \"run\" string must be specified"
     exit(1)
