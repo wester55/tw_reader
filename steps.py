@@ -19,31 +19,27 @@ vagrant = vagrant.rstrip()
 if vagrant == "":
     print "Vagrant not found"
     exit (1)
+exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
 if sys.argv[1] == "setup":
-    fldr = os.path.expanduser("~") + "/TrustyBox"
-    exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
     if exist != 0:
 	    print "Looks like our project already running, may be you want './steps.py run'?"
 	    exit (1)
-    try:
-        subprocess.call(["mkdir", fldr])
-    except:
-        pass
+    fldr = os.path.expanduser("~") + "/TrustyBox"
+    subprocess.call(["mkdir", fldr])
     os.chdir(fldr)
     subprocess.call([vagrant, "init"])
     p = subprocess.Popen(setup_command1, shell=True)
-    output, err = p.communicate()
+    p.communicate()
     subprocess.call([vagrant, "up"])
 elif sys.argv[1] == "run":
-    exist = subprocess.Popen([vagrant, setup_command2], stdout=subprocess.PIPE).communicate()[0]
-    if exist == 0:
+    if exist != 1:
 	    print "Looks like our project not running, you need './steps.py setup' first."
 	    exit (1)
     p = subprocess.Popen(run_command1, shell=True)
-    output, err = p.communicate()
+    p.communicate()
     print ""
     p = subprocess.Popen(run_command2, shell=True)
-    output, err = p.communicate()
+    p.communicate()
 else:
     print "Only one argument allowed, either \"setup\" or \"run\" string must be specified"
     exit(1)
