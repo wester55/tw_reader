@@ -2,12 +2,16 @@ from __future__ import absolute_import, print_function
 
 # Go to http://apps.twitter.com and create an app.
 # The consumer key and secret will be generated for you after
+import sys
 import json
 import mimetypes
+import ssl
+from time import sleep
 from urlparse import parse_qs
 import six
 import requests
 from requests_oauthlib import OAuth1Session, OAuth1
+from requests.exceptions import Timeout
 
 consumer_key="ngyEI20AOXmNDuKA0s1J5Gt2l"
 consumer_secret="LzzPeoF5EipYsMwnO5uC1u7pKVrHDatERb9CBTjDJX1dZKcRX7"
@@ -16,6 +20,8 @@ consumer_secret="LzzPeoF5EipYsMwnO5uC1u7pKVrHDatERb9CBTjDJX1dZKcRX7"
 # Create an access token under the the "Your access token" section
 access_token="15629921-O5zGhOvfB6w20xjmcDZMcudwzLVG5qn7ckjPqH97Y"
 access_token_secret="HdndTCcaPt1bDunZXDwDexMmpbOBkrlGa2zr5hgTXJjyL"
+
+search_string = sys.argv[1]
 
 STREAM_VERSION = '1.1'
 
@@ -1550,6 +1556,46 @@ class StreamListener(object):
         """Called when a disconnection warning message arrives"""
         return
 
+class ReadBuffer(object):
+    """Buffer data from the response in a smarter way than httplib/requests can.
+
+    Tweets are roughly in the 2-12kb range, averaging around 3kb.
+    Requests/urllib3/httplib/socket all use socket.read, which blocks
+    until enough data is returned. On some systems (eg google appengine), socket
+    reads are quite slow. To combat this latency we can read big chunks,
+    but the blocking part means we won't get results until enough tweets
+    have arrived. That may not be a big deal for high throughput systems.
+    For low throughput systems we don't want to sacrafice latency, so we
+    use small chunks so it can read the length and the tweet in 2 read calls.
+    """
+
+    def __init__(self, stream, chunk_size):
+        self._stream = stream
+        self._buffer = ''
+        self._chunk_size = chunk_size
+
+    def read_len(self, length):
+        while not self._stream.closed:
+            if len(self._buffer) >= length:
+                return self._pop(length)
+            read_len = max(self._chunk_size, length - len(self._buffer))
+            self._buffer += self._stream.read(read_len)
+
+    def read_line(self, sep='\n'):
+        start = 0
+        while not self._stream.closed:
+            loc = self._buffer.find(sep, start)
+            if loc >= 0:
+                return self._pop(loc + len(sep))
+            else:
+                start = len(self._buffer)
+            self._buffer += self._stream.read(self._chunk_size)
+
+    def _pop(self, length):
+        r = self._buffer[:length]
+        self._buffer = self._buffer[length:]
+        return r
+
 class Stream(object):
 
     host = 'stream.twitter.com'
@@ -2496,4 +2542,4 @@ if __name__ == '__main__':
     auth.set_access_token(access_token, access_token_secret)
 
     stream = Stream(auth, l)
-    stream.filter(track=['basketball'])
+    stream.filter(track=[search_string])
