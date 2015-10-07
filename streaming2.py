@@ -17,6 +17,8 @@ consumer_secret="LzzPeoF5EipYsMwnO5uC1u7pKVrHDatERb9CBTjDJX1dZKcRX7"
 access_token="15629921-O5zGhOvfB6w20xjmcDZMcudwzLVG5qn7ckjPqH97Y"
 access_token_secret="HdndTCcaPt1bDunZXDwDexMmpbOBkrlGa2zr5hgTXJjyL"
 
+STREAM_VERSION = '1.1'
+
 class Parser(object):
 
     def parse(self, method, payload):
