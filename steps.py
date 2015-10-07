@@ -25,12 +25,23 @@ if sys.argv[1] == "setup":
     if exist != 0:
 	    print "Looks like our project already running, may be you want './steps.py run'?"
 	    exit (1)
+    search_string = raw_input('Enter string we are going to search:')
     fldr = os.path.expanduser("~") + "/TrustyBox"
     subprocess.call(["mkdir", fldr])
     os.chdir(fldr)
     subprocess.call([vagrant, "init"])
     p = subprocess.Popen(setup_command1, shell=True)
     p.communicate()
+    replacements = {'SEARCHSTRING':search_string}
+    lines = []
+    with open(fldr + "/Vagrantfile") as infile:
+        for line in infile:
+            for src, target in replacements.iteritems():
+                line = line.replace(src, target)
+            lines.append(line)
+    with open(fldr + "/Vagrantfile", 'w') as outfile:
+        for line in lines:
+            outfile.write(line)
     subprocess.call([vagrant, "up"])
 elif sys.argv[1] == "run":
     if exist == 0:
