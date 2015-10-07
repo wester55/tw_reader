@@ -12,6 +12,7 @@ Vagrant.configure(2) do |config|
     apt-get install -y mongodb
     apt-get install -y python-pip
     pip install pymongo==2.7.2
+    pip install requests_oauthlib
     apt-get -y install git
     git clone https://github.com/mongodb-labs/sleepy.mongoose.git
     mongo twitter --eval "db.createCollection( 'messages', { capped: true, size: 100000 } )"
