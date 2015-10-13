@@ -1,12 +1,17 @@
-from __future__ import absolute_import, print_function
+#from __future__ import absolute_import, print_function
+from cgi import log
+from datetime import datetime, time
+from email.utils import parsedate
+import logging
+import os
 
-# Go to http://apps.twitter.com and create an app.
-# The consumer key and secret will be generated for you after
 import sys
 import json
 import mimetypes
 import ssl
+from threading import Thread
 from time import sleep
+from urllib import quote
 from urlparse import parse_qs
 import six
 import requests
@@ -15,15 +20,15 @@ from requests.exceptions import Timeout
 
 consumer_key="ngyEI20AOXmNDuKA0s1J5Gt2l"
 consumer_secret="LzzPeoF5EipYsMwnO5uC1u7pKVrHDatERb9CBTjDJX1dZKcRX7"
-
-# After the step above, you will be redirected to your app's page.
-# Create an access token under the the "Your access token" section
 access_token="15629921-O5zGhOvfB6w20xjmcDZMcudwzLVG5qn7ckjPqH97Y"
 access_token_secret="HdndTCcaPt1bDunZXDwDexMmpbOBkrlGa2zr5hgTXJjyL"
 
 search_string = sys.argv[1]
 
 STREAM_VERSION = '1.1'
+WARNING_MESSAGE = """Warning! Due to a Twitter API bug, signin_with_twitter
+and access_type don't always play nice together. Details
+https://dev.twitter.com/discussions/21281"""
 
 class Parser(object):
 
@@ -43,7 +48,6 @@ class Parser(object):
         """
         raise NotImplementedError
 
-
 class RawParser(Parser):
 
     def __init__(self):
@@ -54,7 +58,6 @@ class RawParser(Parser):
 
     def parse_error(self, payload):
         return payload
-
 
 class JSONParser(Parser):
 
@@ -84,7 +87,6 @@ class JSONParser(Parser):
             return error['error']
         else:
             return error['errors']
-
 
 class ModelParser(JSONParser):
 
@@ -116,6 +118,246 @@ class ModelParser(JSONParser):
             return result, cursors
         else:
             return result
+
+def convert_to_utf8_str(arg):
+    # written by Michael Norton (http://docondev.blogspot.com/)
+    if isinstance(arg, six.text_type):
+        arg = arg.encode('utf-8')
+    elif not isinstance(arg, bytes):
+        arg = six.text_type(arg).encode('utf-8')
+    return arg
+
+def bind_api(**config):
+
+    class APIMethod(object):
+
+        api = config['api']
+        path = config['path']
+        payload_type = config.get('payload_type', None)
+        payload_list = config.get('payload_list', False)
+        allowed_param = config.get('allowed_param', [])
+        method = config.get('method', 'GET')
+        require_auth = config.get('require_auth', False)
+        search_api = config.get('search_api', False)
+        upload_api = config.get('upload_api', False)
+        use_cache = config.get('use_cache', True)
+        session = requests.Session()
+
+        def __init__(self, args, kwargs):
+            api = self.api
+            # If authentication is required and no credentials
+            # are provided, throw an error.
+            if self.require_auth and not api.auth:
+                raise TweepError('Authentication required!')
+
+            self.post_data = kwargs.pop('post_data', None)
+            self.retry_count = kwargs.pop('retry_count',
+                                          api.retry_count)
+            self.retry_delay = kwargs.pop('retry_delay',
+                                          api.retry_delay)
+            self.retry_errors = kwargs.pop('retry_errors',
+                                           api.retry_errors)
+            self.wait_on_rate_limit = kwargs.pop('wait_on_rate_limit',
+                                                 api.wait_on_rate_limit)
+            self.wait_on_rate_limit_notify = kwargs.pop('wait_on_rate_limit_notify',
+                                                        api.wait_on_rate_limit_notify)
+            self.parser = kwargs.pop('parser', api.parser)
+            self.session.headers = kwargs.pop('headers', {})
+            self.build_parameters(args, kwargs)
+
+            # Pick correct URL root to use
+            if self.search_api:
+                self.api_root = api.search_root
+            elif self.upload_api:
+                self.api_root = api.upload_root
+            else:
+                self.api_root = api.api_root
+
+            # Perform any path variable substitution
+            self.build_path()
+
+            if self.search_api:
+                self.host = api.search_host
+            elif self.upload_api:
+                self.host = api.upload_host
+            else:
+                self.host = api.host
+
+            # Manually set Host header to fix an issue in python 2.5
+            # or older where Host is set including the 443 port.
+            # This causes Twitter to issue 301 redirect.
+            # See Issue https://github.com/tweepy/tweepy/issues/12
+            self.session.headers['Host'] = self.host
+            # Monitoring rate limits
+            self._remaining_calls = None
+            self._reset_time = None
+
+        def build_parameters(self, args, kwargs):
+            self.session.params = {}
+            for idx, arg in enumerate(args):
+                if arg is None:
+                    continue
+                try:
+                    self.session.params[self.allowed_param[idx]] = convert_to_utf8_str(arg)
+                except IndexError:
+                    raise TweepError('Too many parameters supplied!')
+
+            for k, arg in kwargs.items():
+                if arg is None:
+                    continue
+                if k in self.session.params:
+                    raise TweepError('Multiple values for parameter %s supplied!' % k)
+
+                self.session.params[k] = convert_to_utf8_str(arg)
+
+            log.info("PARAMS: %r", self.session.params)
+
+        def build_path(self):
+            for variable in re_path_template.findall(self.path):
+                name = variable.strip('{}')
+
+                if name == 'user' and 'user' not in self.session.params and self.api.auth:
+                    # No 'user' parameter provided, fetch it from Auth instead.
+                    value = self.api.auth.get_username()
+                else:
+                    try:
+                        value = quote(self.session.params[name])
+                    except KeyError:
+                        raise TweepError('No parameter value found for path variable: %s' % name)
+                    del self.session.params[name]
+
+                self.path = self.path.replace(variable, value)
+
+        def execute(self):
+            self.api.cached_result = False
+
+            # Build the request URL
+            url = self.api_root + self.path
+            full_url = 'https://' + self.host + url
+
+            # Query the cache if one is available
+            # and this request uses a GET method.
+            if self.use_cache and self.api.cache and self.method == 'GET':
+                cache_result = self.api.cache.get(url)
+                # if cache result found and not expired, return it
+                if cache_result:
+                    # must restore api reference
+                    if isinstance(cache_result, list):
+                        for result in cache_result:
+                            if isinstance(result, Model):
+                                result._api = self.api
+                    else:
+                        if isinstance(cache_result, Model):
+                            cache_result._api = self.api
+                    self.api.cached_result = True
+                    return cache_result
+
+            # Continue attempting request until successful
+            # or maximum number of retries is reached.
+            retries_performed = 0
+            while retries_performed < self.retry_count + 1:
+                # handle running out of api calls
+                if self.wait_on_rate_limit:
+                    if self._reset_time is not None:
+                        if self._remaining_calls is not None:
+                            if self._remaining_calls < 1:
+                                sleep_time = self._reset_time - int(time.time())
+                                if sleep_time > 0:
+                                    if self.wait_on_rate_limit_notify:
+                                        print("Rate limit reached. Sleeping for:", sleep_time)
+                                    time.sleep(sleep_time + 5)  # sleep for few extra sec
+
+                # if self.wait_on_rate_limit and self._reset_time is not None and \
+                #                 self._remaining_calls is not None and self._remaining_calls < 1:
+                #     sleep_time = self._reset_time - int(time.time())
+                #     if sleep_time > 0:
+                #         if self.wait_on_rate_limit_notify:
+                #             print("Rate limit reached. Sleeping for: " + str(sleep_time))
+                #         time.sleep(sleep_time + 5)  # sleep for few extra sec
+
+                # Apply authentication
+                if self.api.auth:
+                    auth = self.api.auth.apply_auth()
+
+                # Request compression if configured
+                if self.api.compression:
+                    self.session.headers['Accept-encoding'] = 'gzip'
+
+                # Execute request
+                try:
+                    resp = self.session.request(self.method,
+                                                full_url,
+                                                data=self.post_data,
+                                                timeout=self.api.timeout,
+                                                auth=auth,
+                                                proxies=self.api.proxy)
+                except Exception as e:
+                    raise TweepError('Failed to send request: %s' % e)
+                rem_calls = resp.headers.get('x-rate-limit-remaining')
+                if rem_calls is not None:
+                    self._remaining_calls = int(rem_calls)
+                elif isinstance(self._remaining_calls, int):
+                    self._remaining_calls -= 1
+                reset_time = resp.headers.get('x-rate-limit-reset')
+                if reset_time is not None:
+                    self._reset_time = int(reset_time)
+                if self.wait_on_rate_limit and self._remaining_calls == 0 and (
+                        # if ran out of calls before waiting switching retry last call
+                        resp.status_code == 429 or resp.status_code == 420):
+                    continue
+                retry_delay = self.retry_delay
+                # Exit request loop if non-retry error code
+                if resp.status_code == 200:
+                    break
+                elif (resp.status_code == 429 or resp.status_code == 420) and self.wait_on_rate_limit:
+                    if 'retry-after' in resp.headers:
+                        retry_delay = float(resp.headers['retry-after'])
+                elif self.retry_errors and resp.status_code not in self.retry_errors:
+                    break
+
+                # Sleep before retrying request again
+                time.sleep(retry_delay)
+                retries_performed += 1
+
+            # If an error was returned, throw an exception
+            self.api.last_response = resp
+            if resp.status_code and not 200 <= resp.status_code < 300:
+                try:
+                    error_msg = self.parser.parse_error(resp.text)
+                except Exception:
+                    error_msg = "Twitter error response: status code = %s" % resp.status_code
+
+                if is_rate_limit_error_message(error_msg):
+                    raise RateLimitError(error_msg, resp)
+                else:
+                    raise TweepError(error_msg, resp)
+
+            # Parse the response payload
+            result = self.parser.parse(self, resp.text)
+
+            # Store result into cache if one is available.
+            if self.use_cache and self.api.cache and self.method == 'GET' and result:
+                self.api.cache.store(url, result)
+
+            return result
+
+    def _call(*args, **kwargs):
+        method = APIMethod(args, kwargs)
+        if kwargs.get('create'):
+            return method
+        else:
+            return method.execute()
+
+    # Set pagination mode
+    if 'cursor' in APIMethod.allowed_param:
+        _call.pagination_mode = 'cursor'
+    elif 'max_id' in APIMethod.allowed_param:
+        if 'since_id' in APIMethod.allowed_param:
+            _call.pagination_mode = 'id'
+    elif 'page' in APIMethod.allowed_param:
+        _call.pagination_mode = 'page'
+
+    return _call
 
 class API(object):
     """Twitter API"""
@@ -1939,7 +2181,6 @@ class OAuthHandler(AuthHandler):
             self.request_token = self._get_request_token(access_type=access_type)
             return self.oauth.authorization_url(url)
         except Exception as e:
-            raise
             raise TweepError(e)
 
     def get_access_token(self, verifier=None):
@@ -2034,7 +2275,6 @@ def import_simplejson():
 
     return json
 
-
 def list_to_csv(item_list):
     if item_list:
         return ','.join([str(i) for i in item_list])
@@ -2064,7 +2304,6 @@ class ResultSet(list):
 
     def ids(self):
         return [item.id for item in self if hasattr(item, 'id')]
-
 
 class Model(object):
 
@@ -2101,6 +2340,18 @@ class Model(object):
         state = ['%s=%s' % (k, repr(v)) for (k, v) in vars(self).items()]
         return '%s(%s)' % (self.__class__.__name__, ', '.join(state))
 
+def parse_datetime(string):
+    return datetime(*(parsedate(string)[:6]))
+
+def parse_html_value(html):
+
+    return html[html.find('>')+1:html.rfind('<')]
+
+def parse_a_href(atag):
+
+    start = atag.find('"') + 1
+    end = atag.find('"', start)
+    return atag[start:end]
 
 class Status(Model):
 
@@ -2159,7 +2410,6 @@ class Status(Model):
             return result
 
         return not result
-
 
 class User(Model):
 
@@ -2231,7 +2481,6 @@ class User(Model):
                                        *args,
                                        **kargs)
 
-
 class DirectMessage(Model):
 
     @classmethod
@@ -2248,7 +2497,6 @@ class DirectMessage(Model):
 
     def destroy(self):
         return self._api.destroy_direct_message(self.id)
-
 
 class Friendship(Model):
 
@@ -2268,7 +2516,6 @@ class Friendship(Model):
 
         return source, target
 
-
 class Category(Model):
 
     @classmethod
@@ -2277,7 +2524,6 @@ class Category(Model):
         for k, v in json.items():
             setattr(category, k, v)
         return category
-
 
 class SavedSearch(Model):
 
@@ -2293,7 +2539,6 @@ class SavedSearch(Model):
 
     def destroy(self):
         return self._api.destroy_saved_search(self.id)
-
 
 class SearchResults(ResultSet):
 
@@ -2312,7 +2557,6 @@ class SearchResults(ResultSet):
         for status in json['statuses']:
             results.append(status_model.parse(api, status))
         return results
-
 
 class List(Model):
 
@@ -2380,7 +2624,6 @@ class List(Model):
                                             self.slug,
                                             id)
 
-
 class Relation(Model):
     @classmethod
     def parse(cls, api, json):
@@ -2394,7 +2637,6 @@ class Relation(Model):
                 setattr(result, k, v)
         return result
 
-
 class Relationship(Model):
     @classmethod
     def parse(cls, api, json):
@@ -2407,13 +2649,11 @@ class Relationship(Model):
                 setattr(result, k, v)
         return result
 
-
 class JSONModel(Model):
 
     @classmethod
     def parse(cls, api, json):
         return json
-
 
 class IDModel(Model):
 
@@ -2423,7 +2663,6 @@ class IDModel(Model):
             return json
         else:
             return json['ids']
-
 
 class BoundingBox(Model):
 
@@ -2454,7 +2693,6 @@ class BoundingBox(Model):
         appears to be the case at present.
         """
         return tuple(self.coordinates[0][2])
-
 
 class Place(Model):
 
@@ -2489,7 +2727,6 @@ class Place(Model):
             results.append(cls.parse(api, obj))
         return results
 
-
 class Media(Model):
 
     @classmethod
@@ -2522,7 +2759,6 @@ class ModelFactory(object):
     ids = IDModel
     place = Place
     bounding_box = BoundingBox
-
 
 class StdOutListener(StreamListener):
     """ A listener handles tweets are the received from the stream.
